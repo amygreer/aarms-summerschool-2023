@@ -1,0 +1,193 @@
+---
+title: "Zoonotic Spillover Problems 1.7"
+author: "Amy Greer, Bonne Bay 2023"
+date: "07/25/2023"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+getwd()
+require(deSolve)
+require(rmarkdown)
+require(sfsmisc)
+require(dplyr)
+require(readxl)
+require(bbmle)
+require(beepr)
+```
+
+# **PART ONE - Lets first go back the the simple SEIR model we set up last week in Problem set 1.1 (go back and find that code)**
+
+Let's assume that this model is for seasonal influenza in a human population (the parameter values are not in line with seasonal influenza but let's pretend for now). 
+```{r}
+require(deSolve)
+
+ seirmod=function(t, y, parms){
+   #Pull state variables from y vector
+   S=y[1]
+   E=y[2]
+   I=y[3]
+   R=y[4]
+   #Pull the required parameter values from the parms vector
+   beta=parms["beta"]
+   kappa=parms["kappa"]
+   alpha=parms["alpha"]
+   N=parms["N"]
+   #Define the equations (use what you wrote out in question 1) - 6 points
+   dS = -(beta*S*I/N)
+   dE = +(beta*S*I/N) - (kappa*E)
+   dI = (kappa*E) - (alpha*I)
+   dR = (alpha*I)
+   res=c(dS, dE, dI, dR)
+   #Return list of gradients
+   list(res)
+ }
+
+```
+
+```{r}
+times  = seq(0, 100, by=1)
+parms  = c(beta=0.5, kappa=1/3, alpha=1/7, N=10000)
+start = c(S=9950, E=0, I=50, R = 0)
+```
+
+```{r}
+out = ode(y = start, times = times, func = seirmod, 
+     parms = parms)
+out=as.data.frame(out)
+head(round(out, 3))
+```
+
+```{r}
+plot(x = out$time, y = out$S, col = "black", ylab = "Number of individuals", 
+      xlab = "Time (days)", type = "l", xlim = c(0, 100), ylim = c(0,10000))
+ lines(x = out$time, y = out$E, col = "yellow")
+ lines(x = out$time, y = out$I, col = "red")
+ lines(x = out$time, y = out$R, col = "blue")
+
+```
+# **Adding in Spillover**
+
+In this example, we are going to assume that humans in the model can become infected with seasonal influenza (the model above) but that people in this population also visit live bird markets (LBM) with some frequency. These LBM visits represent contact between poultry in the market with humans visiting the market. Additionally, organizations like FAO conduct sink surveillance which is a way to estimate prevalence of a pathogen like highly pathogenic avaian influenza (HPAI) within a market setting without having to test individual poultry and in a way that is easy, low cost, and non-invasive (https://www.fao.org/3/i2252e/i2252e.pdf). We are going to use an approach described by Iacono et al. (2016) to model spillover of HPAI from poultry into people who have exposure to the pathogen as a result of visiting LBM. 
+
+Our new model structure will include individuals infected with seasonal influenza, or HPAI (spillover from poultry). The compartment diagram looks like this (you can see I have used subscripts to differentiate between human and poultry viruses).
+
+![Updated SEIR Spillover Compartment model](Compartments HPAI.png)
+
+![Spillover process](Iacono_2016.png)
+
+Since the spillover component of the model is going to need to be stochastic, we first need to provide some code to to set up the stochasticity where we will draw a parameter value from a distribution for the spillover equation. 
+
+```{r}
+set.seed(142)
+nsamp <-1000 # run 1000 iterations of the model
+sampseed<-sample(1:10e5, nsamp, replace=F)
+sampseed<-as.data.frame(sampseed)
+```
+
+We also need to provide someplace for the data from each iteration to be stored. 
+```{r}
+#save results dataframe
+res_S <- matrix(0,366,nsamp) #matrix for the samples
+res_E <- matrix(0,366,nsamp) #matrix for the samples
+res_I <- matrix(0,366,nsamp) #matrix for the samples
+res_R <- matrix(0,366,nsamp) #matrix for the samples
+res_P <- matrix(0,366,nsamp) #matrix for the samples
+res_xr <-matrix(0,1,nsamp)  #matrix for the samples
+
+for (i in 1:nsamp)
+  {set.seed(sampseed[i,])}
+  
+```
+
+Now we will set up the compartment model structure.
+
+```{r}
+
+ seirmod=function(t, y, parms){
+   #Create state variables from y vector
+   S=y[1]
+   E=y[2]
+   I=y[3]
+   R=y[4]
+   P=y[5]
+   
+    with ( 
+      as.list (parms), {
+        L1 = rpois(1,lambda=(S*pr*xr*nr*intervention)) # this is the distribution we will draw from for the spillover events
+        dS = -(beta*S*I/N)- L1
+        dE = +(beta*S*I/N) - (kappa*E)
+        dI = (kappa*E) - (alpha*I)
+        dR = (alpha*I)
+        dP = L1
+        
+        
+        # combine results
+        res = c (dS, dE, dI, dR, dP)
+        list (res)
+      })
+  }
+  
+ ### Defining Parameters
+beta=0.5
+kappa=1/3
+alpha=1/7
+N=100000
+intervention=1 # this indicates no intervention on the spillover side to reduce risk
+pr=0.52 #prevalence of HPAI in infected poultry at the LBM
+nr=30.2/365 #(average number of exposures to poultry in LBM in 1 year)
+xr= rgamma(1, shape=0.005, scale=1) #infection response efficiency. low efficiency (for high efficiency can do 0.01?, or consider 0.001 vs 0.005 if the 0.01 is too high?)
+
+#save the xr values for each run -- so we can see what proportion were above threshold
+  res_xr[,i]<-xr
+  
+#when xr is too big it won't run, so we have set it to shape
+  #if(xr > 0.01){
+   # xr<-0.005
+  #}  
+  
+
+```
+
+```{r}
+### fill named vectors with our parameter values and initial conditions
+parms = c(beta=beta, kappa=kappa, alpha=alpha, N=N, intervention=intervention, pr=pr, nr=nr, xr=xr)
+inits = c(S=999500,E=0,I=50,R=0, P=0)
+times  = seq(0, 365, by=1)
+
+solved_model = as.data.frame(ode(inits, times, seirmod, parms, method="rk4", hini=0.01)) 
+  res_S[,i]<- solved_model$S
+  res_E[,i]<- solved_model$E
+  res_I[,i]<- solved_model$I
+  res_R[,i]<-solved_model$R
+  res_P[,i]<- solved_model$P
+  
+  
+# Tell about progress
+  cat('Completed', i, 'of', nsamp,'\n')
+  
+#beep when finished running
+beep(3)
+```
+```{r}
+#Write outcomes
+write.csv(res_S, "/Users/amygreer/Library/CloudStorage/OneDrive-UniversityofGuelph/Guelph/2022-2023 Academic Year/Teaching/Bonne Bay/Zoonotic spillover/Loweff_Results/Base_Case/Susceptibles.csv", row.names=TRUE)
+write.csv(res_E, "/Users/amygreer/Library/CloudStorage/OneDrive-UniversityofGuelph/Guelph/2022-2023 Academic Year/Teaching/Bonne Bay/Zoonotic spillover/Loweff_Results/Base_Case/Exposed.csv", row.names=TRUE)
+write.csv(res_I, "/Users/amygreer/Library/CloudStorage/OneDrive-UniversityofGuelph/Guelph/2022-2023 Academic Year/Teaching/Bonne Bay/Zoonotic spillover/Loweff_Results/Base_Case/Infected.csv", row.names=TRUE)
+write.csv(res_R, "/Users/amygreer/Library/CloudStorage/OneDrive-UniversityofGuelph/Guelph/2022-2023 Academic Year/Teaching/Bonne Bay/Zoonotic spillover/Loweff_Results/Base_Case/Recovered.csv", row.names=TRUE)
+write.csv(res_P, "/Users/amygreer/Library/CloudStorage/OneDrive-UniversityofGuelph/Guelph/2022-2023 Academic Year/Teaching/Bonne Bay/Zoonotic spillover/Loweff_Results/Base_Case/Infected_avian.csv", row.names=TRUE)
+write.csv(res_xr, "/Users/amygreer/Library/CloudStorage/OneDrive-UniversityofGuelph/Guelph/2022-2023 Academic Year/Teaching/Bonne Bay/Zoonotic spillover/Loweff_Results/Base_Case/xr_efficiency_precutoff.csv", row.names=TRUE)
+```
+
+## **Questions for your consideration (20 points)**
+
+1) Compare your results with a classmate. Do you get the same results? Why or why not? (4 points)
+
+2) In your model iterations did you see any spillover events happen? If so, in how many simulation runs did you observe one of more spillover events happening and how many events did you observe? (2 points)
+
+3) Describe some of the reasons why spillover might *not* happen have been observed in your model. Can any of these factors be adjusted to increase your chance of observing spillover events in this model? If so, what could you try? (6 points)
+
+4) Choose at least one of the factors you described above and try modifying your model code and rerunning the simulations to increase the chance that you observe a spillover event (which are rare). Why do you think these modifications will increase the occurrence of spillover events? Describe what you changed, why you hypothesize that the change will increase spillover risk, and then describe your updated model results. If the change you implement does not increase the spillover risk what is your possible explanation for that and how would you revise your hypothesis as a result? (8 points)
+
+
