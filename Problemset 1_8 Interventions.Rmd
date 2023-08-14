@@ -1,0 +1,77 @@
+---
+title: "Problem Set 1.8 - Controlling Infectious Diseases - STUDENT COPY "
+author: "Amy Greer, University of Guelph for Bonne Bay Summer School 2023"
+date: '2023-06-28'
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+require(deSolve)
+require(rmarkdown)
+require(ggplot2)
+require(epimdr)
+require(epitools)
+require(R0)
+#getwd()
+```
+
+Now you are going to develop a simple SIR model to demonstrate the impact of a non-pharmaceutical intervention (isolation of infected individuals). We are going to try to figure out the optimal approach for isolation in this model.
+
+##### 1) Code a simple SIR model with the initial conditions and parameter values in the Table below and check to make sure that you can generate an initial epidemic curve that looks like the image below (4 points)
+
+![Table of Parameters](Problems1_8_Table1.png)
+![Initial Epidemic Curve](Epidemic_Curve.png)
+
+```{r}
+sirmod=function(t, y, parms){
+   
+ }
+```
+
+```{r}
+times  = 
+parms  = 
+start =
+   
+```
+
+```{r}
+
+```
+Plot your model outcome and compare it to the image above to make sure your model gives you the correct outbreak before moving on. 
+```{r}
+
+```
+##### 2) What proportion of the population remains susceptible when the epidemic is over in this base model? (2 points)
+
+```{r}
+
+```
+
+##### 3) Now add a quarantine compartment (Q) to your model. Assume that 50% of infected individuals (p = 0.5) enter quarantine on average, 2 days (d = 1/2 days = 0.5) into their illness. Assume that individuals leave quarantine after 5 days (tau = 1/5 days = 0.2). What proportion of the population remains susceptible in this case? (12 points)
+
+```{r}
+
+```
+
+##### 5) Now explore the behaviour of your model to look at different durations of isolation and different proportions of individuals entering isolation. If the objective is to minimize the total number of infections in the population, what is the best way to accomplish this using only isolation requirements? Plot some different comparisons to demonstrate what you believe to be the best approach. (6 points)
+
+```{r}
+
+```
+
+##### 6) How could you get more "bang for your buck" with an isolation approach? How could you further reduce the number of overall infections? What are some of the additional complexities (related to the pathogen of interest) that would need to be considered? (4 points) *there is no need to code a model for this. Just walk me through some ideas that you could consider in a model*
+
+
+
+
+
+
+
+
+
+
+
